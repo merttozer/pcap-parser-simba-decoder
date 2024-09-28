@@ -59,6 +59,15 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "span": "cpp",
+        "future": "cpp",
+        "bitset": "cpp",
+        "csignal": "cpp",
+        "complex": "cpp",
+        "list": "cpp",
+        "set": "cpp",
+        "typeindex": "cpp",
+        "variant": "cpp"
     }
 }

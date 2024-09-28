@@ -2,44 +2,50 @@
 #define SIMBA_DECODER_HPP
 
 #include "simba_messages.hpp"
+#include "packet_decoder.hpp"
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <span>
+#include <unordered_map>
+#include <functional>
+#include <mutex>
+#include <future>
 
 namespace simba {
 
-class SimbaDecoder
+class SimbaDecoder : public PacketDecoder
 {
 public:
-    // Constructor: Initialize decoder with packet data
-    explicit SimbaDecoder(const std::vector<uint8_t>& packetData);
-
-    // Main method to decode the packet data into structured messages
-    void decode();
-
-    // Convert the decoded messages to a JSON string
-    std::string toJSON() const;
+    explicit SimbaDecoder();
+    void decode(std::span<const uint8_t> packetData) override;
+    std::string toJSON() const override;
 
 private:
-    // Reference to the packet data to decode
-    const std::vector<uint8_t>& packetData;
-
-    // Parse headers
-    MarketDataPacketHeader parseMarketDataPacketHeader(
-      size_t& offset) const noexcept;
-    IncrementalPacketHeader parseIncrementalPacketHeader(
-      size_t& offset) const noexcept;
-    SBEHeader parseSBEHeader(size_t& offset) const noexcept;
-
-    // Decoders for each message type
-    OrderUpdate decodeOrderUpdate(size_t& offset) const noexcept;
-    OrderExecution decodeOrderExecution(size_t& offset) const noexcept;
-    OrderBookSnapshot decodeOrderBookSnapshot(size_t& offset) const;
-
-    // Storage for decoded messages
     std::vector<OrderUpdate> orderUpdates;
     std::vector<OrderExecution> orderExecutions;
     std::vector<OrderBookSnapshot> orderBookSnapshots;
+
+    using DecodeFunction =
+      std::function<void(std::span<const uint8_t>, size_t&)>;
+    std::unordered_map<uint16_t, DecodeFunction> decodeMap;
+
+    void initializeDecodeMap();
+
+    static MarketDataPacketHeader parseMarketDataPacketHeader(
+      std::span<const uint8_t> packetData,
+      size_t& offset);
+    static IncrementalPacketHeader parseIncrementalPacketHeader(
+      std::span<const uint8_t> packetData,
+      size_t& offset);
+    static SBEHeader parseSBEHeader(std::span<const uint8_t> packetData,
+                                    size_t& offset);
+
+    void decodeOrderUpdate(std::span<const uint8_t> packetData, size_t& offset);
+    void decodeOrderExecution(std::span<const uint8_t> packetData,
+                              size_t& offset);
+    void decodeOrderBookSnapshot(std::span<const uint8_t> packetData,
+                                 size_t& offset);
 };
 
 } // namespace simba

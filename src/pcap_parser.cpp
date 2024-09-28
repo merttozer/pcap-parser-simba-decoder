@@ -6,12 +6,13 @@
 
 namespace pcap {
 
-// Constructor initializes the input and output filenames
 PcapParser::PcapParser(const std::string& filename,
-                       const std::string& outputFile)
+                       const std::string& outputFile,
+                       std::unique_ptr<PacketDecoder> decoder)
   : filename(filename)
   , outputFile(outputFile)
   , globalHeader{}
+  , decoder(std::move(decoder))
 {
 }
 
@@ -132,9 +133,9 @@ UDPHeader PcapParser::parseUDPHeader(std::ifstream& file)
 void PcapParser::saveDecodedPacket(const PcapPacket& packet,
                                    std::ofstream& outFile)
 {
-    simba::SimbaDecoder decoder(packet.data);
-    decoder.decode();
-    std::string jsonOutput = decoder.toJSON();
+    std::cout << "decode..\n";
+    decoder->decode(packet.data);
+    std::string jsonOutput = decoder->toJSON();
     outFile << jsonOutput << std::endl;
 }
 

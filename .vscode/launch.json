@@ -6,7 +6,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/pcap_parser",  // Update this if your output binary is in a different location.
-            "args": [], // You can pass command line arguments here if needed.
+            "args": ["${workspaceFolder}/pcap_files/input.pcap","${workspaceFolder}/output_files/output.json"], // You can pass command line arguments here if needed.
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

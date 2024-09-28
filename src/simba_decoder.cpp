@@ -7,94 +7,88 @@
 namespace simba {
 
 // Constructor: Initialize the packet data reference
-SimbaDecoder::SimbaDecoder(const std::vector<uint8_t>& packetData)
-  : packetData(packetData)
+SimbaDecoder::SimbaDecoder()
 {
+    initializeDecodeMap();
+}
+
+void SimbaDecoder::initializeDecodeMap()
+{
+    decodeMap[OrderUpdate::TEMPLATE_ID] = [this](std::span<const uint8_t> data,
+                                                 size_t& offset) {
+        decodeOrderUpdate(data, offset);
+    };
+    decodeMap[OrderExecution::TEMPLATE_ID] =
+      [this](std::span<const uint8_t> data, size_t& offset) {
+          decodeOrderExecution(data, offset);
+      };
+    decodeMap[OrderBookSnapshot::TEMPLATE_ID] =
+      [this](std::span<const uint8_t> data, size_t& offset) {
+          decodeOrderBookSnapshot(data, offset);
+      };
 }
 
 // Main decode function that processes the entire packet data
-void SimbaDecoder::decode()
+void SimbaDecoder::decode(std::span<const uint8_t> packetData)
 {
     size_t offset = 0;
-
-    // Step 1: Parse Market Data Packet Header
     MarketDataPacketHeader marketDataPacketHeader =
-      parseMarketDataPacketHeader(offset);
-
-    // Step 2: If it's an Incremental Packet, parse the Incremental Packet
-    // Header
+      parseMarketDataPacketHeader(packetData, offset);
     if (marketDataPacketHeader.IsIncremental()) {
         IncrementalPacketHeader incrementalPacketHeader =
-          parseIncrementalPacketHeader(offset);
+          parseIncrementalPacketHeader(packetData, offset);
     }
 
-    // Step 3: Parse SBE Messages until the end of packet data
     while (offset < packetData.size()) {
-        SBEHeader header = parseSBEHeader(offset);
-        switch (header.template_id) {
-            case OrderUpdate::TEMPLATE_ID:
-                orderUpdates.emplace_back(decodeOrderUpdate(offset));
-                break;
-            case OrderExecution::TEMPLATE_ID:
-                orderExecutions.emplace_back(decodeOrderExecution(offset));
-                break;
-            case OrderBookSnapshot::TEMPLATE_ID:
-                orderBookSnapshots.emplace_back(
-                  decodeOrderBookSnapshot(offset));
-                break;
-            default:
-                // Skip unknown messages by advancing the offset by the block
-                // length
-                offset += header.block_length;
-                break;
+        SBEHeader header = parseSBEHeader(packetData, offset);
+        auto it = decodeMap.find(header.template_id);
+        if (it != decodeMap.end()) {
+            it->second(packetData, offset);
+        } else {
+            // Skip unknown messages
+            offset += header.block_length;
         }
     }
 }
 
-// Decode OrderUpdate message from the packet data
-OrderUpdate SimbaDecoder::decodeOrderUpdate(size_t& offset) const noexcept
+void SimbaDecoder::decodeOrderUpdate(std::span<const uint8_t> packetData,
+                                     size_t& offset)
 {
     OrderUpdate update;
     std::memcpy(&update, &packetData[offset], OrderUpdate::SIZE);
-    offset += OrderUpdate::SIZE; // Advance the offset
-    return update;
+    offset += OrderUpdate::SIZE;
+    orderUpdates.emplace_back(update);
 }
 
-// Decode OrderExecution message from the packet data
-OrderExecution SimbaDecoder::decodeOrderExecution(size_t& offset) const noexcept
+void SimbaDecoder::decodeOrderExecution(std::span<const uint8_t> packetData,
+                                        size_t& offset)
 {
     OrderExecution execution;
     std::memcpy(&execution, &packetData[offset], OrderExecution::SIZE);
-    offset += OrderExecution::SIZE; // Advance the offset
-    return execution;
+    offset += OrderExecution::SIZE;
+    orderExecutions.emplace_back(execution);
 }
 
-// Decode OrderBookSnapshot message from the packet data
-OrderBookSnapshot SimbaDecoder::decodeOrderBookSnapshot(size_t& offset) const
+void SimbaDecoder::decodeOrderBookSnapshot(std::span<const uint8_t> packetData,
+                                           size_t& offset)
 {
-    OrderBookSnapshot snapshot{};
+    OrderBookSnapshot snapshot;
+    std::memcpy(&snapshot, &packetData[offset], OrderBookSnapshot::SIZE);
+    offset += OrderBookSnapshot::SIZE;
 
-    // Copy the fixed-size portion of the snapshot structure
-    std::memcpy(
-      &snapshot.security_id, &packetData[offset], OrderBookSnapshot::SIZE);
-    offset += OrderBookSnapshot::SIZE; // Advance the offset
-
-    // Resize the vector to hold all entries
     snapshot.entries.resize(snapshot.no_md_entries.num_in_group);
-
-    // Copy each entry individually
     for (auto& entry : snapshot.entries) {
         std::memcpy(
           &entry, &packetData[offset], OrderBookSnapshot::Entry::SIZE);
-        offset += OrderBookSnapshot::Entry::SIZE; // Advance the offset
+        offset += OrderBookSnapshot::Entry::SIZE;
     }
-
-    return snapshot;
+    orderBookSnapshots.emplace_back(snapshot);
 }
 
 // Parse the Market Data Packet Header
 MarketDataPacketHeader SimbaDecoder::parseMarketDataPacketHeader(
-  size_t& offset) const noexcept
+  std::span<const uint8_t> packetData,
+  size_t& offset)
 {
     MarketDataPacketHeader header;
     std::memcpy(&header, &packetData[offset], MarketDataPacketHeader::SIZE);
@@ -104,7 +98,8 @@ MarketDataPacketHeader SimbaDecoder::parseMarketDataPacketHeader(
 
 // Parse the Incremental Packet Header
 IncrementalPacketHeader SimbaDecoder::parseIncrementalPacketHeader(
-  size_t& offset) const noexcept
+  std::span<const uint8_t> packetData,
+  size_t& offset)
 {
     IncrementalPacketHeader header;
     std::memcpy(&header, &packetData[offset], IncrementalPacketHeader::SIZE);
@@ -113,7 +108,8 @@ IncrementalPacketHeader SimbaDecoder::parseIncrementalPacketHeader(
 }
 
 // Parse the SBE (Simple Binary Encoding) Header
-SBEHeader SimbaDecoder::parseSBEHeader(size_t& offset) const noexcept
+SBEHeader SimbaDecoder::parseSBEHeader(std::span<const uint8_t> packetData,
+                                       size_t& offset)
 {
     SBEHeader header;
     std::memcpy(&header, &packetData[offset], SBEHeader::SIZE);

@@ -1,4 +1,6 @@
 /build
+/pcap_files
+/output_files
 *.o
 *.a
 *.so
